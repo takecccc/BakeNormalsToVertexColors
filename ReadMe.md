@@ -19,8 +19,10 @@ lilToonの輪郭線の頂点カラーにて`RGBA -> Normal & Width`を選択し�
 ## 使用方法
 1. オブジェクトモードにて、法線をベイクしたいオブジェクトを選択します。(複数選択可)
 2. `3D Viewport > Object > Bake Normals To Vertex Colors`を実行します。
+3. Fbxとしてエクスポートする際は、GeometryのVertex ColorsをLinearに設定してください。
 
 ## 注意
 Auto Smoothモディファイアで法線が変更されている場合、その結果が反映されません。
 実行する前にAuto SmoothモディファイアをApplyしてください。
 
+color_attributeでアクセスしているため、sRGBではなくlinearで格納されます。エクスポート時の設定に注意してください。
