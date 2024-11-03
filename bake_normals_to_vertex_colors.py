@@ -11,10 +11,11 @@ class BakeNormalsToVertexColors(bpy.types.Operator):
     method: bpy.props.EnumProperty(
         name="Method",
         description="method of normal calculation.",
-        default="CROSS",
+        default="VERTEX_NORMALS",
         items=[
             ("AVERAGE", "Average", "各頂点が関わるLoopの法線の平均"),
             ("CROSS", "Cross", "各法線と垂直な平面の交点"),
+            ("VERTEX_NORMALS", "Vertex Normal", "各法線と垂直な平面の交点"),
         ]
     )
 
@@ -109,6 +110,10 @@ def bake_normals_to_vertex_colors(obj:bpy.types.Object, method, normalize_distan
                 if vertex_normals[i] > 1.0:
                     vertex_normals[i] = 1.0
     
+    elif method == "VERTEX_NORMALS":
+        print("VERTEX_NORMALS")
+        for i in range(len(mesh.vertices)):
+            vertex_normals[i] = mesh.vertex_normals[i].vector
     else:
         raise Exception(f"not supported method : {method}")
 
