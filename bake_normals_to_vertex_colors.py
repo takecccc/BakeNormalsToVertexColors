@@ -11,18 +11,26 @@ class BakeNormalsToVertexColors(bpy.types.Operator):
     method: bpy.props.EnumProperty(
         name="Method",
         description="method of normal calculation.",
-        default="VERTEX_NORMALS",
+        default="ANGLE_WEIGHT",
         items=[
             ("AVERAGE", "Average", "各頂点が関わるLoopの法線の平均"),
             ("CROSS", "Cross", "各法線と垂直な平面の交点"),
             ("VERTEX_NORMALS", "Vertex Normal", "各法線と垂直な平面の交点"),
-        ]
+            ("ANGLE_WEIGHT", "Angle Weight", "Angle weighted length."),
+        ],
     )
 
-    normalize_distance : bpy.props.BoolProperty(
-        name="Normalize_distance",
-        description="CROSS選択時に法線の長さを正規化するかどうか",
-        default=True
+    length_is_one: bpy.props.BoolProperty(
+        name="set all length to 1",
+        description="法線の長さを1に正規化するかどうか",
+        default=False,
+    )
+
+    length_limit : bpy.props.FloatProperty(
+        name="length limit",
+        description="法線の長さの最大値。立方体を綺麗に出すならsqrt(3)以上。",
+        default=2,
+        min = 0,
     )
 
     @classmethod
@@ -34,17 +42,18 @@ class BakeNormalsToVertexColors(bpy.types.Operator):
     def draw(self, context):
         layout = self.layout
         layout.prop(self, "method")
-        if(self.method == "CROSS"):
-            layout.prop(self, "normalize_distance")
+        layout.prop(self, "length_is_one")
+        if not self.length_is_one:
+            layout.prop(self, "length_limit")
 
     def execute(self, context):
         for obj in context.selected_objects:
             if obj.type != "MESH":
                 continue
-            bake_normals_to_vertex_colors(obj, self.method, self.normalize_distance)
+            bake_normals_to_vertex_colors(obj, self.method, self.length_is_one, self.length_limit)
         return {"FINISHED"}
 
-def bake_normals_to_vertex_colors(obj:bpy.types.Object, method, normalize_distance:bool):
+def bake_normals_to_vertex_colors(obj:bpy.types.Object, method, length_is_one:bool, length_limit:float):
     if obj.type != "MESH":
         raise Exception("This object's type is not a MESH")
 
@@ -92,30 +101,69 @@ def bake_normals_to_vertex_colors(obj:bpy.types.Object, method, normalize_distan
             else:
                 vertex_normals[vert_idx] = make_new_normal(vertex_normals[vert_idx], loop.normal)
         
-        if normalize_distance:
-            for i in range(len(vertex_normals)):
-                vertex_normals[i] = vertex_normals[i].normalized()
-        else:
-            # 最大の長さが1となるように正規化
-            max_length = 0
-            for n in vertex_normals:
-                if max_length < n.length:
-                    max_length = n.length
-            if max_length > 0:
-                coef = 1.0 / max_length
-            else:
-                coef = 1.0
-            for i in range(len(vertex_normals)):
-                vertex_normals[i] = vertex_normals[i] * coef
-                if vertex_normals[i] > 1.0:
-                    vertex_normals[i] = 1.0
-    
     elif method == "VERTEX_NORMALS":
         print("VERTEX_NORMALS")
         for i in range(len(mesh.vertices)):
             vertex_normals[i] = mesh.vertex_normals[i].vector
+
+    elif method == "ANGLE_WEIGHT":
+        print("ANGLE_WEIGHT")
+        verts:list[bpy.types.MeshVertex] = mesh.vertices
+        vert_dist = [0.0,] * len(verts)
+        vert_accum = [0.0,] * len(verts)
+        vert_normals:list[bpy.types.MeshNormalValue] = mesh.vertex_normals
+        vert_nors:list[Vector] = [vert_normal.vector for vert_normal in vert_normals]
+        for polygon in mesh.polygons:
+            polygon:bpy.types.MeshPolygon
+            # 最後のloopから処理する
+            loop_prev:bpy.types.MeshLoop = mesh.loops[polygon.loop_indices[-2]]
+            loop_curr:bpy.types.MeshLoop = mesh.loops[polygon.loop_indices[-1]]
+            nor_prev:Vector = verts[loop_prev.vertex_index].co - verts[loop_curr.vertex_index].co
+            for loop_index in polygon.loop_indices:
+                loop_next:bpy.types.MeshLoop = mesh.loops[loop_index]
+                nor_next:Vector = verts[loop_curr.vertex_index].co - verts[loop_next.vertex_index].co
+                # loopの前後のエッジが成す角度を計算(0°は存在しない前提)
+                angle = nor_prev.angle(-nor_next)
+                vidx = loop_curr.vertex_index
+                # 影響度を、エッジの成す角度とする
+                vert_accum[vidx] += angle
+                # 面の法線と頂点の法線の間の角度によって法線の長さを調整 1/cos(angle)
+                # 45°の場合、sqrt(2)となり立方体が綺麗になる。
+                # vertex_normalとface_normalの成す角度なので、90°を超えないはず。一応絶対値をとる。
+                angle_cos = abs(vert_nors[vidx].dot(polygon.normal))
+                # 限りなく尖った頂点の場合、長さが発散してしまうのを防ぐ。
+                angle_cos = max(angle_cos, 1.0e-8)
+                vert_dist[vidx] += (1.0/angle_cos) * angle
+                # 次の頂点にそなえて更新
+                loop_prev = loop_curr
+                loop_curr = loop_next
+        
+        # 頂点の法線として格納
+        for i in range(len(verts)):
+            # distanceについて、重みつき平均をとる
+            vertex_normals[i] = vert_nors[i] * (vert_dist[i] / vert_accum[i])
     else:
         raise Exception(f"not supported method : {method}")
+
+    if length_is_one:
+        for i in range(len(vertex_normals)):
+            vertex_normals[i] = vertex_normals[i].normalized()    
+    else:
+        # dist_limitで制限
+        for i in range(len(vertex_normals)):
+            dist = vertex_normals[i].length
+            normal = vertex_normals[i].normalized()
+            dist = min(dist, length_limit)
+            vertex_normals[i] = normal * dist
+
+    # 最大の長さが1となるように正規化
+    max_length = max([n.length for n in vertex_normals])
+    if max_length > 0:
+        coef = 1.0 / max_length
+    else:
+        coef = 1.0
+    for i in range(len(vertex_normals)):
+        vertex_normals[i] = vertex_normals[i] * coef
 
     # 頂点カラーを取得
     if not mesh.color_attributes:
@@ -131,15 +179,11 @@ def bake_normals_to_vertex_colors(obj:bpy.types.Object, method, normalize_distan
     # 頂点カラーに書き込み
     for i, loop in enumerate(mesh.loops):
         loop:bpy.types.MeshLoop
-        vert_idx = loop.vertex_index
-        loop_tangent = loop.tangent
-        loop_bitangent = loop.bitangent
-        loop_normal = loop.normal
-        world_normal = vertex_normals[vert_idx]
+        world_normal = vertex_normals[loop.vertex_index]
         local_normal = Vector((
-            Vector.dot(world_normal, loop_tangent.xyz),
-            Vector.dot(world_normal, loop_bitangent.xyz),
-            Vector.dot(world_normal, loop_normal.xyz)
+            Vector.dot(world_normal, loop.tangent.xyz),
+            Vector.dot(world_normal, loop.bitangent.xyz),
+            Vector.dot(world_normal, loop.normal.xyz)
         )).normalized()
         color = Vector((
             local_normal.x * 0.5 + 0.5,
