@@ -1,5 +1,4 @@
 import bpy
-import mathutils
 from mathutils import Vector
 
 class BakeNormalsToVertexColors(bpy.types.Operator):
@@ -79,7 +78,7 @@ def bake_normals_to_vertex_colors(obj:bpy.types.Object, adjust_length:bool, leng
                 # 影響度を、エッジの成す角度とする
                 vert_angle_accum[vidx] += angle
                 # 面の法線と頂点の法線の間の角度によって法線の長さを調整 1/cos(angle)
-                # 45°の場合、sqrt(2)となり立方体が綺麗になる。
+                # 面の法線の長さを1とした際に、面の法線と垂直に交わる長さとなる。
                 # vertex_normalとface_normalの成す角度なので、90°を超えないはず。一応絶対値をとる。
                 angle_cos = abs(vert_nors_dir[vidx].dot(polygon.normal))
                 # 限りなく尖った頂点の場合、長さが発散してしまうのを防ぐ。

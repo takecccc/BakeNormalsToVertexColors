@@ -1,9 +1,9 @@
+from . import bake_normals_to_vertex_colors
+
 if "bpy" in locals():
     # 2回目以降の読み込みではモジュールをリロード
     import importlib
     importlib.reload(bake_normals_to_vertex_colors)
-else:
-    from . import bake_normals_to_vertex_colors
 
 import bpy
 
@@ -14,7 +14,7 @@ bl_info = {
     "author" : "takec",
     "description" : "Bake normals to vertex colors.",
     "blender" : (4, 2, 0),
-    "version" : (1, 1, 0),
+    "version" : (1, 2, 0),
     "location" : "View3D > Object",
     "warning" : "",
     "category" : "Object"
