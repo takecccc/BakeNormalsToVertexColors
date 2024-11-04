@@ -1,12 +1,14 @@
 # Bake Normals To Vertex Colors
 lilToonのOutline用に法線を頂点カラーとしてベイクするBlenderアドオンです。
+
 ![Bake_Normals_To_Vertex_Colors](https://github.com/user-attachments/assets/88823d00-2071-4d31-a381-83c38efed411)
 
 ## 動作説明
-選択したオブジェクトのアクティブなVertexColorに対して、各ポリゴンの各頂点に対する法線を頂点毎に平均化した法線をベイクします。
+選択したオブジェクトのアクティブなVertexColor(Color Attributes)に対して、頂点の法線をベイクします。
 選択したオブジェクトにVertexColorが存在しなければ、NormalColorsという名前で追加した上でベイクします。
 
 lilToonの輪郭線の頂点カラーにて`RGBA -> Normal & Width`を選択して使うことを想定しています。
+
 ![image](https://github.com/user-attachments/assets/618e4e60-4eb8-416e-bf90-ba90d03f7e76)
 
 
@@ -42,3 +44,8 @@ Auto Smoothモディファイアで法線が変更されている場合、その
 実行する前にAuto SmoothモディファイアをApplyしてください。
 
 color_attributeでアクセスしているため、sRGBではなくlinearで格納されます。エクスポート時の設定に注意してください。
+
+頂点カラーに書き込まれた法線ベクトルは、各頂点のTangent Spaceを用いて使用されます。
+Tangent Spaceはuv座標を用いて計算されるため、uvを変更した際は再度法線をBakeしてください。
+
+fbxとしてexportする際、GeometryのTangent Spaceにチェックを入れ、Unityのimport設定のTangentsはImportに設定することをおすすめします。
